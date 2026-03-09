@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VisualIllusion Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  @font-face { font-family: 'Inter'; src: local('Segoe UI'), local('Arial'); }
+
+  :root {
+    --bg-primary: #08080c;
+    --bg-secondary: #0e0e14;
+    --bg-card: #13131b;
+    --bg-input: #1a1a24;
+    --border: #1f1f2e;
+    --border-hover: #2a2a3e;
+    --text-primary: #e4e4e7;
+    --text-secondary: #8b8b9e;
+    --text-muted: #52526a;
+    --accent: #7c3aed;
+    --accent-glow: #8b5cf6;
+    --accent-dim: #5b21b6;
+    --success: #22c55e;
+    --success-glow: #4ade80;
+    --danger: #ef4444;
+  }
+
+  body {
+    font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+    background: transparent;
+    color: var(--text-primary);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .window {
+    width: 660px;
+    height: 540px;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.8), 0 0 1px rgba(124,58,237,0.3);
+  }
+
+  /* ---- Titlebar ---- */
+  .titlebar {
+    height: 38px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+  }
+  .titlebar-icon {
+    width: 18px; height: 18px;
+    margin-right: 8px;
+    border-radius: 4px;
+  }
+  .titlebar-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex: 1;
+    font-weight: 500;
+  }
+  .titlebar-btns {
+    display: flex;
+    gap: 2px;
+    -webkit-app-region: no-drag;
+  }
+  .titlebar-btn {
+    width: 32px; height: 26px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .titlebar-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .titlebar-btn.close:hover { background: var(--danger); color: #fff; }
+
+  /* ---- Content ---- */
+  .content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .step {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 32px 40px 24px;
+    opacity: 0;
+    transform: translateX(30px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    pointer-events: none;
+  }
+  .step.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  .step.exit-left {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+
+  /* ---- Step indicators ---- */
+  .steps-indicator {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    padding: 12px 0 16px;
+    flex-shrink: 0;
+  }
+  .step-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+  }
+  .step-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+  .step-dot.done { background: var(--success); }
+
+  /* ---- Logo ---- */
+  .logo-section {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .logo-img {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(124,58,237,0.3);
+  }
+  .logo-text h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+  .logo-text p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ---- Welcome ---- */
+  .welcome-desc {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: auto;
+  }
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .feature-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: rgba(124,58,237,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--accent-glow);
+  }
+
+  /* ---- Settings ---- */
+  .setting-group {
+    margin-bottom: 18px;
+  }
+  .setting-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .path-input {
+    display: flex;
+    gap: 8px;
+  }
+  .path-field {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'Consolas', 'Cascadia Code', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .path-field:focus { border-color: var(--accent); }
+  .browse-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0 16px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .browse-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .checkbox-item:hover { background: rgba(255,255,255,0.03); }
+  .custom-check {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: transparent;
+  }
+  .checkbox-item.checked .custom-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .checkbox-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .size-info {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .size-value { color: var(--text-secondary); font-weight: 600; }
+
+  /* ---- Progress ---- */
+  .progress-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .progress-percent {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .progress-percent span {
+    font-size: 18px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+  .progress-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .progress-time-value {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .progress-bar-track {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent), var(--accent-glow));
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+  }
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: -2px;
+    width: 14px; height: 10px;
+    background: var(--accent-glow);
+    border-radius: 50%;
+    filter: blur(4px);
+    opacity: 0.8;
+  }
+  .progress-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .progress-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    font-family: 'Consolas', monospace;
+  }
+  .stage-log {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .stage-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 12px;
+    animation: stageIn 0.3s ease;
+  }
+  @keyframes stageIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .stage-time {
+    color: var(--text-muted);
+    font-family: 'Consolas', monospace;
+    min-width: 50px;
+    flex-shrink: 0;
+  }
+  .stage-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  .stage-icon.pending { color: var(--text-muted); }
+  .stage-icon.active { color: var(--accent-glow); }
+  .stage-icon.done { color: var(--success); }
+  .stage-text { color: var(--text-secondary); }
+
+  /* ---- Complete ---- */
+  .complete-icon {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: rgba(34,197,94,0.1);
+    border: 2px solid rgba(34,197,94,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    margin: 0 auto 20px;
+    animation: completeIn 0.5s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes completeIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .complete-title {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .complete-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .complete-path {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'Consolas', monospace;
+    text-align: center;
+    margin-bottom: 24px;
+    word-break: break-all;
+  }
+
+  /* ---- Buttons ---- */
+  .btn-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 16px;
+  }
+  .btn {
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    outline: none;
+  }
+  .btn-secondary {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .btn-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(124,58,237,0.3);
+  }
+  .btn-primary:hover { background: var(--accent-glow); box-shadow: 0 4px 20px rgba(124,58,237,0.4); }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  .btn-success {
+    background: var(--success);
+    color: #000;
+    font-weight: 700;
+    box-shadow: 0 2px 12px rgba(34,197,94,0.3);
+  }
+  .btn-success:hover { background: var(--success-glow); }
+
+  /* ---- Scrollbar ---- */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+  /* ---- Spinner ---- */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--text-muted);
+    border-top-color: var(--accent-glow);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="window">
+  <div class="titlebar">
+    <img class="titlebar-icon" src="../public/visualillusion_white_n.png" onerror="this.style.display='none'" />
+    <div class="titlebar-text">VisualIllusion Setup</div>
+    <div class="titlebar-btns">
+      <button class="titlebar-btn" onclick="window.installer.minimize()" title="Свернуть">─</button>
+      <button class="titlebar-btn close" onclick="window.installer.close()" title="Закрыть">✕</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- ====== STEP 1: Welcome ====== -->
+    <div class="step active" id="step-welcome">
+      <div class="logo-section">
+        <img class="logo-img" src="../public/visualillusion_white_n.png" onerror="this.style.display='none'" />
+        <div class="logo-text">
+          <h1>VisualIllusion</h1>
+          <p id="version-text">Версия 1.4.0</p>
+        </div>
+      </div>
+      <p class="welcome-desc">
+        Добро пожаловать в программу установки.<br>
+        VisualIllusion будет установлен на ваш компьютер.
+      </p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+          <span>Удалённое управление устройствами</span>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <span>Безопасное шифрованное соединение</span>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          <span>Панель администратора в реальном времени</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="window.installer.close()">Отмена</button>
+        <button class="btn btn-primary" onclick="goToStep(1)">Далее →</button>
+      </div>
+    </div>
+
+    <!-- ====== STEP 2: Settings ====== -->
+    <div class="step" id="step-settings">
+      <div class="logo-section" style="margin-bottom:18px">
+        <div class="logo-text">
+          <h1 style="font-size:18px">Параметры установки</h1>
+          <p>Выберите папку и параметры</p>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label">Папка установки</div>
+        <div class="path-input">
+          <input class="path-field" id="install-path" type="text" readonly />
+          <button class="browse-btn" onclick="browsePath()">Обзор...</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label">Параметры</div>
+        <div class="checkbox-group">
+          <div class="checkbox-item checked" id="chk-desktop" onclick="toggleCheck(this)">
+            <div class="custom-check">✓</div>
+            <span class="checkbox-text">Создать ярлык на рабочем столе</span>
+          </div>
+          <div class="checkbox-item checked" id="chk-startmenu" onclick="toggleCheck(this)">
+            <div class="custom-check">✓</div>
+            <span class="checkbox-text">Создать ярлык в меню Пуск</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="size-info">
+        <span>Требуемое место:</span>
+        <span class="size-value" id="required-space">~1.8 ГБ</span>
+      </div>
+      <div class="size-info" id="download-info" style="display:none;margin-top:8px">
+        <span>Загрузка из интернета:</span>
+        <span class="size-value" style="color:var(--accent-glow)">Требуется подключение</span>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="goToStep(0)">← Назад</button>
+        <button class="btn btn-primary" onclick="startInstalling()">Установить</button>
+      </div>
+    </div>
+
+    <!-- ====== STEP 3: Installing ====== -->
+    <div class="step" id="step-installing">
+      <div class="progress-section">
+        <div class="progress-header">
+          <div class="progress-percent" id="pct-display">0<span>%</span></div>
+          <div class="progress-time">
+            <div>Осталось: <span class="progress-time-value" id="time-remaining">подсчёт...</span></div>
+            <div style="margin-top:2px">Скорость: <span class="progress-time-value" id="copy-speed">—</span></div>
+          </div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-status" id="progress-status">Подготовка...</div>
+        <div class="progress-detail" id="progress-detail">&nbsp;</div>
+        <div class="stage-log" id="stage-log"></div>
+      </div>
+    </div>
+
+    <!-- ====== STEP 4: Complete ====== -->
+    <div class="step" id="step-complete">
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+        <div class="complete-icon">✓</div>
+        <div class="complete-title">Установка завершена!</div>
+        <div class="complete-subtitle">VisualIllusion успешно установлен на ваш компьютер</div>
+        <div class="complete-path" id="complete-path"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="window.installer.close()">Готово</button>
+        <button class="btn btn-success" onclick="launchAndClose()">Открыть приложение</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps-indicator">
+    <div class="step-dot active" id="dot-0"></div>
+    <div class="step-dot" id="dot-1"></div>
+    <div class="step-dot" id="dot-2"></div>
+    <div class="step-dot" id="dot-3"></div>
+  </div>
+</div>
+
+<script>
+  const steps = ['step-welcome', 'step-settings', 'step-installing', 'step-complete'];
+  let currentStep = 0;
+  let installPath = '';
+  let installStartTime = 0;
+
+  // Init
+  (async () => {
+    const defaultPath = await window.installer.getDefaultPath();
+    installPath = defaultPath;
+    document.getElementById('install-path').value = defaultPath;
+
+    // Dynamically set logo images (relative path may not work in packaged mode)
+    try {
+      const logoUrl = await window.installer.getLogoPath();
+      if (logoUrl) {
+        document.querySelectorAll('.titlebar-icon, .logo-img').forEach(img => {
+          img.src = logoUrl;
+        });
+      }
+    } catch {}
+
+    // Get download info (version, web-install mode)
+    try {
+      const info = await window.installer.getDownloadInfo();
+      if (info) {
+        if (info.version) {
+          const vt = document.getElementById('version-text');
+          if (vt) vt.textContent = 'Версия ' + info.version;
+        }
+        if (info.isWebInstall) {
+          const di = document.getElementById('download-info');
+          if (di) di.style.display = 'flex';
+        }
+      }
+    } catch {}
+  })();
+
+  // Listen for progress
+  window.installer.onProgress((data) => {
+    const pct = Math.min(data.percent, 99);
+    document.getElementById('pct-display').innerHTML = pct + '<span>%</span>';
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    // Show different info for download vs extract stage
+    if (data.stage === 'download') {
+      document.getElementById('progress-detail').textContent =
+        `Загружено: ${formatSize(data.copiedSize)} / ${formatSize(data.totalSize)}`;
+    } else {
+      // Files info
+      document.getElementById('progress-detail').textContent =
+        `${data.copiedFiles} / ${data.totalFiles} файлов  •  ${formatSize(data.copiedSize)} / ${formatSize(data.totalSize)}`;
+    }
+
+    // Time remaining
+    if (data.remainingSeconds > 0 && data.percent > 2) {
+      document.getElementById('time-remaining').textContent = formatTime(data.remainingSeconds);
+    }
+
+    // Speed
+    if (data.speed > 0) {
+      document.getElementById('copy-speed').textContent = formatSize(data.speed) + '/с';
+    }
+  });
+
+  // Listen for stages
+  const stageIcons = {
+    prepare: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M1 12h4m14 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>',
+    directory: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    download: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    copying: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    configure: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    shortcuts: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+    done: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  };
+
+  window.installer.onStage((data) => {
+    document.getElementById('progress-status').textContent = data.text;
+    if (data.detail) {
+      document.getElementById('progress-detail').textContent = data.detail;
+    }
+
+    // Add to log
+    const log = document.getElementById('stage-log');
+    const elapsed = installStartTime ? Math.round((Date.now() - installStartTime) / 1000) : 0;
+    const timeStr = elapsed < 60 ? elapsed + 'с' : Math.floor(elapsed / 60) + 'м ' + (elapsed % 60) + 'с';
+
+    const entry = document.createElement('div');
+    entry.className = 'stage-entry';
+    entry.innerHTML = `
+      <span class="stage-time">${timeStr}</span>
+      <span class="stage-icon ${data.stage === 'done' ? 'done' : 'active'}">${stageIcons[data.stage] || '●'}</span>
+      <span class="stage-text">${data.text}</span>
+    `;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    if (data.stage === 'done') {
+      document.getElementById('pct-display').innerHTML = '100<span>%</span>';
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('time-remaining').textContent = 'готово';
+      // Auto advance to complete step after a short delay
+      setTimeout(() => goToStep(3), 800);
+    }
+  });
+
+  function goToStep(idx) {
+    if (idx === currentStep) return;
+    const oldEl = document.getElementById(steps[currentStep]);
+    const newEl = document.getElementById(steps[idx]);
+
+    oldEl.classList.remove('active');
+    oldEl.classList.add('exit-left');
+    setTimeout(() => oldEl.classList.remove('exit-left'), 400);
+
+    newEl.classList.add('active');
+
+    // Update dots
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById('dot-' + i);
+      dot.className = 'step-dot';
+      if (i < idx) dot.classList.add('done');
+      if (i === idx) dot.classList.add('active');
+    }
+
+    currentStep = idx;
+  }
+
+  async function browsePath() {
+    const selected = await window.installer.selectFolder();
+    if (selected) {
+      installPath = selected + '\\VisualIllusion';
+      document.getElementById('install-path').value = installPath;
+    }
+  }
+
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+  }
+
+  async function startInstalling() {
+    const desktopShortcut = document.getElementById('chk-desktop').classList.contains('checked');
+    const startMenuShortcut = document.getElementById('chk-startmenu').classList.contains('checked');
+
+    goToStep(2);
+    installStartTime = Date.now();
+
+    const result = await window.installer.startInstall({
+      installPath,
+      desktopShortcut,
+      startMenuShortcut,
+    });
+
+    if (result.success) {
+      document.getElementById('complete-path').textContent = result.installPath;
+    } else {
+      document.getElementById('complete-path').textContent = 'Ошибка: ' + (result.error || 'неизвестная');
+      document.querySelector('.complete-icon').textContent = '✗';
+      document.querySelector('.complete-icon').style.borderColor = 'rgba(239,68,68,0.3)';
+      document.querySelector('.complete-icon').style.background = 'rgba(239,68,68,0.1)';
+      document.querySelector('.complete-title').textContent = 'Ошибка установки';
+      document.querySelector('.complete-subtitle').textContent = result.error;
+    }
+  }
+
+  function launchAndClose() {
+    window.installer.launchApp(installPath);
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' КБ';
+    if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' МБ';
+    return (bytes / 1073741824).toFixed(2) + ' ГБ';
+  }
+
+  function formatTime(seconds) {
+    if (seconds < 5) return 'менее 5 сек';
+    if (seconds < 60) return '~' + seconds + ' сек';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return '~' + m + ' мин ' + s + ' сек';
+  }
+</script>
+
+</body>
+</html>

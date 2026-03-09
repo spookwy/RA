@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VisualIllusion</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #09090b;
+  color: #fafafa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+.container {
+  text-align: center;
+  animation: fadeIn 0.8s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ---- Animated logo ---- */
+.logo-wrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 28px;
+}
+
+.logo-glow {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(161,161,170,0.15) 0%, transparent 70%);
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+
+.logo {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: logoFloat 4s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.logo img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+/* ---- Text ---- */
+h1 {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  background: linear-gradient(135deg, #fafafa, #d4d4d8, #a1a1aa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+
+.sub {
+  color: #52525b;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-bottom: 48px;
+}
+
+/* ---- Loading bar ---- */
+.loader-wrap {
+  width: 220px;
+  margin: 0 auto 20px;
+}
+
+.loader {
+  width: 100%;
+  height: 3px;
+  background: #1e1e24;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.loader-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, #3f3f46, #71717a, #a1a1aa);
+  border-radius: 4px;
+  animation: loading 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes loading {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* ---- Status text ---- */
+.status {
+  color: #3f3f46;
+  font-size: 12px;
+  font-weight: 500;
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+/* ---- Decorative particles ---- */
+.particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: rgba(161,161,170,0.15);
+  border-radius: 50%;
+  animation: particleFloat linear infinite;
+}
+
+@keyframes particleFloat {
+  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-10vh) rotate(720deg); opacity: 0; }
+}
+
+.particle:nth-child(1)  { left: 10%; animation-duration: 12s; animation-delay: 0s; width: 3px; height: 3px; }
+.particle:nth-child(2)  { left: 25%; animation-duration: 10s; animation-delay: 2s; }
+.particle:nth-child(3)  { left: 40%; animation-duration: 14s; animation-delay: 1s; width: 2px; height: 2px; }
+.particle:nth-child(4)  { left: 55%; animation-duration: 11s; animation-delay: 3s; }
+.particle:nth-child(5)  { left: 70%; animation-duration: 13s; animation-delay: 0.5s; width: 3px; height: 3px; }
+.particle:nth-child(6)  { left: 85%; animation-duration: 9s;  animation-delay: 2.5s; }
+.particle:nth-child(7)  { left: 15%; animation-duration: 15s; animation-delay: 4s; }
+.particle:nth-child(8)  { left: 60%; animation-duration: 11s; animation-delay: 1.5s; width: 2px; height: 2px; }
+.particle:nth-child(9)  { left: 35%; animation-duration: 13s; animation-delay: 3.5s; }
+.particle:nth-child(10) { left: 80%; animation-duration: 10s; animation-delay: 0.8s; width: 3px; height: 3px; }
+
+/* ---- Version ---- */
+.version {
+  position: fixed;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #27272a;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+</style>
+</head>
+<body>
+
+<!-- Background particles -->
+<div class="particles">
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+</div>
+
+<div class="container">
+  <div class="logo-wrap">
+    <div class="logo-glow"></div>
+    <div class="logo">
+      <img src="../public/visualillusion_white_n.png" alt="VisualIllusion" />
+    </div>
+  </div>
+
+  <h1>VisualIllusion</h1>
+  <div class="sub">Remote Admin</div>
+
+  <div class="loader-wrap">
+    <div class="loader">
+      <div class="loader-bar"></div>
+    </div>
+  </div>
+
+  <div class="status">Запуск сервисов...</div>
+</div>
+
+<div class="version">v1.0.0</div>
+
+</body>
+</html>

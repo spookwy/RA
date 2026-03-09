@@ -1,0 +1,24 @@
+# /etc/systemd/system/ws-server.service
+# WebSocket relay server
+#
+# Install:
+#   sudo cp deploy/ws-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ws-server
+
+[Unit]
+Description=Remote Admin WebSocket Server
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/home/deploy/admin-panel
+ExecStart=/usr/bin/node server/ws-server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/home/deploy/admin-panel/.env.local
+
+[Install]
+WantedBy=multi-user.target

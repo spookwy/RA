@@ -1,0 +1,28 @@
+[
+  {
+    "deviceId": "agent-30BB316D667C965E",
+    "hostname": "CMEPTb",
+    "ip": "26.176.182.150",
+    "os": "Windows 10.0.26200",
+    "agentVersion": "2.2.0",
+    "clientName": "TestAgent2",
+    "status": "offline",
+    "lastSeen": "2026-03-02T06:08:36.642Z",
+    "country": "United States",
+    "countryCode": "USA",
+    "city": "Columbus"
+  },
+  {
+    "deviceId": "agent-3257A9FD65834ECF",
+    "hostname": "nevxrmour",
+    "ip": "26.140.186.122",
+    "os": "Windows 10.0.26200",
+    "agentVersion": "2.2.0",
+    "clientName": "MegaDrop",
+    "status": "offline",
+    "lastSeen": "2026-03-02T06:15:44.048Z",
+    "country": "United States",
+    "countryCode": "USA",
+    "city": "Columbus"
+  }
+]

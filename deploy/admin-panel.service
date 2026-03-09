@@ -1,0 +1,24 @@
+# /etc/systemd/system/admin-panel.service
+# Next.js web panel
+#
+# Install:
+#   sudo cp deploy/admin-panel.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now admin-panel
+
+[Unit]
+Description=Remote Admin Panel (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/home/deploy/admin-panel
+ExecStart=/usr/bin/node node_modules/.bin/next start -p 3000
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/home/deploy/admin-panel/.env.local
+
+[Install]
+WantedBy=multi-user.target
