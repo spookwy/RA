@@ -69,7 +69,7 @@ function supabaseRequest(method, restPath, body) {
 }
 
 // ==================== WebSocket Server ====================
-const wss = new WebSocketServer({ port: PORT, maxPayload: 200 * 1024 * 1024 }, () => {
+const wss = new WebSocketServer({ port: PORT, maxPayload: 700 * 1024 * 1024 }, () => {
   console.log(`[WS Server] WebSocket server started on port ${PORT}`);
 });
 
