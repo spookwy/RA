@@ -6,6 +6,9 @@ import { createRequire } from 'module';
 import { verifyToken } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
+// Allow up to 10 minutes for pkg builds on slow servers
+export const maxDuration = 600;
+
 function resolveRootDir() {
   const cwd = process.cwd();
   const standaloneServer = join(cwd, 'server.js');
@@ -121,8 +124,8 @@ function runPkg(pkgBin: string, args: string[], cwd: string, env: NodeJS.Process
     let output = '';
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
-      resolvePromise({ ok: false, output: `${output}\nBuild timeout after 180s` });
-    }, 180000);
+      resolvePromise({ ok: false, output: `${output}\nBuild timeout after 600s` });
+    }, 600000);
 
     child.stdout.on('data', (d) => { output += d.toString(); });
     child.stderr.on('data', (d) => { output += d.toString(); });
@@ -392,7 +395,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const args = [pkgBinJs, srcFile, '--target', target, '--output', outputFile, '--compress', 'GZip'];
+    const args = [pkgBinJs, srcFile, '--target', target, '--output', outputFile];
 
     // Use node.exe (or node from PATH) to run pkg bin.js directly
     const nodeBin = process.execPath || 'node';
@@ -467,19 +470,16 @@ export async function POST(req: NextRequest) {
       unlinkSync(pkgJson);
     } catch { /* ignore */ }
 
-    // Read the file and return as download
-    const fileBuffer = readFileSync(outputFile);
+    // Return JSON with file info — client downloads via /api/build-client/download
     const fileName = `${safeName}${ext}`;
+    const stat = fsStatSync(outputFile);
 
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${fileName}"`,
-        'Content-Length': fileBuffer.length.toString(),
-        'X-File-Name': fileName,
-        'X-File-Path': outputFile.replace(/\\/g, '/'),
-      },
+    return NextResponse.json({
+      success: true,
+      fileName,
+      fileSize: stat.size,
+      filePath: outputFile.replace(/\\/g, '/'),
+      downloadUrl: `/api/build-client/download?name=${encodeURIComponent(fileName)}`,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

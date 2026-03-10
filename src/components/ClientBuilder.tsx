@@ -75,10 +75,23 @@ export default function ClientBuilder() {
     if (iconInputRef.current) iconInputRef.current.value = '';
   };
 
-  // Load existing builds
+  // Load existing builds + fetch runtime WS URL for agent config
   useEffect(() => {
     fetchBuiltFiles();
-  }, []);
+    // Fetch the WS URL from server at runtime (may differ from build-time env var)
+    fetch('/api/ws-url').then(r => r.json()).then(data => {
+      if (data.url) {
+        setConfig(prev => {
+          // Only update if user hasn't manually changed it
+          const defaultUrl = getAutoServerUrl();
+          if (prev.serverUrl === defaultUrl || prev.serverUrl === 'ws://localhost:3001') {
+            return { ...prev, serverUrl: data.url };
+          }
+          return prev;
+        });
+      }
+    }).catch(() => { /* ignore */ });
+  }, [getAutoServerUrl]);
 
   const fetchBuiltFiles = async () => {
     try {
@@ -154,25 +167,31 @@ export default function ClientBuilder() {
         throw new Error(errData.details || errData.error || `HTTP ${res.status}`);
       }
 
-      setProgress(95);
-      addLog('Компиляция завершена. Подготовка файла...');
+      const result = await res.json();
+      if (!result.success || !result.downloadUrl) {
+        throw new Error(result.error || 'Build failed — no download URL');
+      }
 
-      // Download the file
-      const blob = await res.blob();
-      const fileName = res.headers.get('X-File-Name') || `${config.clientName}.exe`;
-      const url = URL.createObjectURL(blob);
+      setProgress(95);
+      addLog('Компиляция завершена. Загрузка файла...');
+
+      // Download the file via separate streaming endpoint (avoids large response body issues)
+      const fileName = result.fileName || `${config.clientName}.exe`;
+      const downloadUrl = result.downloadUrl;
+
+      // Use an invisible iframe/link to trigger download without loading into memory
       const a = document.createElement('a');
-      a.href = url;
+      a.href = downloadUrl;
       a.download = fileName;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
 
       setProgress(100);
       setStatus('success');
-      addLog(`✅ Сборка завершена: ${fileName} (${formatBytes(blob.size)})`);
-      addLog(`Файл сохранён в папку downloads/`);
+      addLog(`✅ Сборка завершена: ${fileName} (${formatBytes(result.fileSize || 0)})`);
+      addLog(`Файл сохранён в downloads/ и скачивается...`);
 
       // Refresh file list
       fetchBuiltFiles();
@@ -445,10 +464,22 @@ export default function ClientBuilder() {
                     {formatBytes(file.size)} · {formatDate(file.createdAt)}
                   </div>
                 </div>
-                <div className="w-5 h-5 bg-emerald-500/10 rounded flex items-center justify-center flex-shrink-0 ml-2">
-                  <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  <a
+                    href={`/api/build-client/download?name=${encodeURIComponent(file.name)}`}
+                    download={file.name}
+                    className="w-6 h-6 bg-blue-500/10 hover:bg-blue-500/20 rounded flex items-center justify-center transition-colors"
+                    title="Скачать"
+                  >
+                    <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </a>
+                  <div className="w-5 h-5 bg-emerald-500/10 rounded flex items-center justify-center">
+                    <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             ))}

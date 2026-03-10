@@ -118,8 +118,17 @@ export default function DashboardPage() {
     }
     fetch('/api/ws-url').then(r => r.json()).then(data => {
       if (data.url) {
-        console.log('[Dashboard] WS URL from server:', data.url);
-        setWsUrl(data.url);
+        // When accessed locally (HTTP + localhost/private IP), prefer direct WS connection
+        // Tunnel URL is only needed when accessing externally (via public IP or HTTPS tunnel)
+        const host = window.location.hostname;
+        const isLocalAccess = window.location.protocol === 'http:' &&
+          /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|::1)/.test(host);
+        if (isLocalAccess) {
+          console.log('[Dashboard] Local access — using direct WS (ws://' + host + ':3001), tunnel available:', data.url);
+        } else {
+          console.log('[Dashboard] External access — using tunnel WS:', data.url);
+          setWsUrl(data.url);
+        }
       }
     }).catch(() => { /* keep default */ });
   }, []);
